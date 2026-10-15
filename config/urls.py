@@ -43,6 +43,7 @@ urlpatterns = [
     path('api/jobs/', include('jobs.urls')),
     path('api/portfolio/', include('portfolio.urls')),
     path('api/messages/', include('messaging.urls')),
+    path('api/operations/', include('operations.urls')),
 ]
 
 from django.conf import settings
