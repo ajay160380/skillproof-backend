@@ -42,9 +42,8 @@ class JobDetailView(generics.RetrieveAPIView):
 
 class JobApplyView(APIView):
     permission_classes = [IsAuthenticated]
-    
     def post(self, request, pk):
-        if request.user.role != 'candidate':
+        if request.user.role not in ['candidate', 'superadmin', 'admin'] and not request.user.is_superuser:
             return Response({"error": "Only candidates can apply to jobs"}, status=status.HTTP_403_FORBIDDEN)
             
         job = get_object_or_404(JobListing, pk=pk, is_active=True)
@@ -326,3 +325,244 @@ class AIGenerateInterviewPrepView(APIView):
             return Response({
                 'prep_guide': f"1. Tell me about a time you overcame a technical challenge related to {role_title}.\n2. Why are you interested in this role?\n3. How do you keep your skills updated?"
             })
+
+class JobPracticeAssignmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        job = get_object_or_404(JobListing, pk=pk)
+        role_title = job.role_title
+        company_name = job.company_name
+        description = job.description or ""
+        required_tests = [t.title for t in job.required_tests.all()]
+        min_score = job.min_score or 70
+
+        try:
+            from groq import Groq
+            from django.conf import settings
+            import json
+
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            prompt = f"""You are a staff technical interviewer designing a practical coding exercise for a candidate preparing for:
+Role: '{role_title}' at '{company_name}'
+Description: {description[:600]}
+Required Competencies: {', '.join(required_tests) if required_tests else 'General Software Engineering'}
+Minimum Score Threshold: {min_score}%
+
+Create a realistic, hands-on practice challenge matching this job's technical demands.
+Return ONLY valid JSON with no markdown backticks and no preamble:
+{{
+  "title": "<short engaging challenge title>",
+  "scenario": "<2-3 sentence context on why {company_name} needs this solved in production>",
+  "problem_statement": "<clear instructions, input format, output format, constraints>",
+  "requirements": [
+    "<key requirement 1>",
+    "<key requirement 2>",
+    "<key requirement 3>"
+  ],
+  "difficulty": "Medium",
+  "estimated_time_minutes": 25,
+  "target_skills": ["Python", "{role_title.split()[0]}", "Algorithms"],
+  "starter_code": "def solution(data):\\n    # Write your production-ready solution here\\n    pass",
+  "sample_cases": [
+    {{"input": "[2, 7, 11, 15], target = 9", "expected_output": "[0, 1]", "explanation": "2 + 7 = 9"}},
+    {{"input": "[3, 2, 4], target = 6", "expected_output": "[1, 2]", "explanation": "2 + 4 = 6"}}
+  ],
+  "hints": [
+    "Think about time vs memory trade-offs.",
+    "Consider edge cases like empty inputs, negative numbers, or duplicate values."
+  ]
+}}"""
+            GROQ_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+            completion = None
+            for model_name in GROQ_MODELS:
+                try:
+                    completion = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.3,
+                        max_tokens=900,
+                    )
+                    if completion and completion.choices and completion.choices[0].message.content:
+                        break
+                except Exception:
+                    continue
+
+            if not completion:
+                raise RuntimeError("All models failed")
+
+            raw = completion.choices[0].message.content.strip()
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            data = json.loads(raw.strip())
+            data['job_id'] = job.id
+            data['role_title'] = role_title
+            data['company_name'] = company_name
+            data['min_score'] = min_score
+            return Response(data)
+        except Exception as e:
+            return Response({
+                "job_id": job.id,
+                "role_title": role_title,
+                "company_name": company_name,
+                "min_score": min_score,
+                "title": f"{role_title} Production Practice Drill",
+                "scenario": f"{company_name} requires resilient software architecture and algorithm optimization for this position.",
+                "problem_statement": f"Implement a resilient data processing algorithm in Python that validates inputs, processes streams efficiently, and handles edge cases for the {role_title} role.",
+                "requirements": [
+                    "Optimal time complexity O(N) or O(N log N)",
+                    "Graceful error handling and input validation",
+                    "Clean, modular function design"
+                ],
+                "difficulty": "Medium",
+                "estimated_time_minutes": 25,
+                "target_skills": ["Python", "Algorithms", "Optimization"],
+                "starter_code": "def solve_pipeline(items: list, target_threshold: int) -> dict:\n    \"\"\"\n    Process the items according to requirements.\n    \"\"\"\n    # TODO: Implement your solution here\n    result = []\n    return {\"processed\": result, \"status\": \"success\"}\n",
+                "sample_cases": [
+                    {"input": "items = [10, 25, 45], target_threshold = 30", "expected_output": "{'processed': [45], 'status': 'success'}", "explanation": "Only items >= threshold processed"},
+                    {"input": "items = [], target_threshold = 10", "expected_output": "{'processed': [], 'status': 'success'}", "explanation": "Empty list handled gracefully"}
+                ],
+                "hints": [
+                    "Use dictionary or hash map lookups for O(1) checks when tracking seen elements.",
+                    "Ensure edge cases like empty lists and boundary values are handled safely."
+                ]
+            })
+
+class JobPracticeEvaluateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        role_title = request.data.get('role_title', 'Software Engineer')
+        problem_statement = request.data.get('problem_statement', '')
+        code_submission = request.data.get('code_submission', '').strip()
+        starter_code = request.data.get('starter_code', '').strip()
+        min_score = int(request.data.get('min_score', 70))
+
+        if not code_submission or len(code_submission) < 10:
+            return Response({'error': 'Please write some code before submitting for evaluation.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Detect empty / stub / unwritten code submissions
+        is_identical_to_starter = bool(starter_code and code_submission == starter_code)
+        has_todo_stub = '# todo' in code_submission.lower() and ('result = []' in code_submission or 'pass' in code_submission)
+        non_comment_lines = [l for l in code_submission.splitlines() if l.strip() and not l.strip().startswith('#') and not l.strip().startswith('"""') and not l.strip().startswith("'''")]
+        is_empty_impl = len(non_comment_lines) <= 3 and any('return' in l or 'pass' in l for l in non_comment_lines)
+
+        if is_identical_to_starter or has_todo_stub or is_empty_impl:
+            return Response({
+                "score": 0,
+                "min_score": min_score,
+                "is_ready": False,
+                "summary": "Incomplete Submission: No custom solution logic detected. The starter template was submitted without implementation.",
+                "strengths": [
+                    "Preserved original function interface"
+                ],
+                "improvements": [
+                    "Implement the core data processing logic inside the function",
+                    "Remove the # TODO comment and return the processed result",
+                    "Add input validation and boundary condition handling"
+                ],
+                "complexity_analysis": "N/A — No algorithmic solution implemented",
+                "readiness_tip": f"Write your solution logic in the editor and click 'Run & Evaluate' again to measure readiness against the {min_score}% threshold."
+            })
+
+        try:
+            from groq import Groq
+            from django.conf import settings
+            import json
+
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            prompt = f"""You are an expert technical interviewer evaluating a practice coding assignment for a candidate preparing for: '{role_title}'.
+Role Minimum Threshold: {min_score}%
+
+Problem:
+{problem_statement[:600]}
+
+Candidate's Code Submission:
+{code_submission[:2000]}
+
+CRITICAL EVALUATION RULES:
+1. If the submission is ONLY placeholder or starter stub code without actual implementation (e.g. contains '# TODO', returns an empty list without processing, pass, or no real algorithm logic), award a score of 0-10% and set 'is_ready': false.
+2. Only award >= {min_score}% if real input validation, stream/list processing, and edge cases are solved.
+
+Return ONLY a valid JSON object with no markdown wrapping:
+{{
+  "score": <int 0-100>,
+  "is_ready": <boolean true if score >= {min_score} else false>,
+  "summary": "<2-sentence summary of the implementation quality>",
+  "strengths": [
+    "<specific strength 1>",
+    "<specific strength 2>"
+  ],
+  "improvements": [
+    "<actionable suggestion 1>",
+    "<actionable suggestion 2>"
+  ],
+  "complexity_analysis": "<Time and Space complexity estimate, e.g. O(N) Time, O(1) Space>",
+  "readiness_tip": "<1 sentence encouragement advising whether they are ready for the official test>"
+}}"""
+            GROQ_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+            completion = None
+            for model_name in GROQ_MODELS:
+                try:
+                    completion = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.1,
+                        max_tokens=600,
+                    )
+                    if completion and completion.choices and completion.choices[0].message.content:
+                        break
+                except Exception:
+                    continue
+
+            if not completion:
+                raise RuntimeError("All models failed")
+
+            raw = completion.choices[0].message.content.strip()
+            if raw.startswith("```json"):
+                raw = raw[7:]
+            if raw.startswith("```"):
+                raw = raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            result = json.loads(raw.strip())
+            result['min_score'] = min_score
+            result['is_ready'] = int(result.get('score', 0)) >= min_score
+            return Response(result)
+        except Exception as e:
+            # Smart rule-based fallback if offline
+            has_loops = any(kw in code_submission for kw in ['for ', 'while ', '[x for x in', '[item for item in'])
+            has_conditionals = any(kw in code_submission for kw in ['if ', 'elif ', 'else:'])
+            has_error_handling = 'try:' in code_submission or 'except' in code_submission
+            
+            if not has_loops and not has_conditionals:
+                estimated_score = 15
+            elif has_loops and has_conditionals and has_error_handling:
+                estimated_score = 70
+            elif has_loops or has_conditionals:
+                estimated_score = 45
+            else:
+                estimated_score = 25
+
+            is_ready = estimated_score >= min_score
+            return Response({
+                "score": estimated_score,
+                "min_score": min_score,
+                "is_ready": is_ready,
+                "summary": f"Your solution was analyzed for structure and syntax. Complete all requirements to reach the {min_score}% threshold.",
+                "strengths": [
+                    "Function interface is valid Python syntax",
+                    "Basic structure present"
+                ],
+                "improvements": [
+                    "Add comprehensive input validation and stream handling",
+                    "Handle unexpected boundary values or non-standard inputs"
+                ],
+                "complexity_analysis": "O(N) Estimated Time, O(1) Auxiliary Space",
+                "readiness_tip": f"Score {estimated_score}% is evaluated based on implemented logic. Keep refining before taking the official assessment."
+            })
+

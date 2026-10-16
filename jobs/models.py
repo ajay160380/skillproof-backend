@@ -9,6 +9,7 @@ class JobListing(models.Model):
     description = models.TextField()
     location = models.CharField(max_length=255, blank=True, null=True)
     salary_range = models.CharField(max_length=100, blank=True, null=True)
+    min_score = models.IntegerField(default=70, help_text="Minimum score required to be eligible")
     required_tests = models.ManyToManyField(SkillTest, related_name='job_listings')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
