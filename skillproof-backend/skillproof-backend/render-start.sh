@@ -8,9 +8,10 @@ python manage.py migrate --no-input
 # Collect static files
 python manage.py collectstatic --no-input
 
-# Start Celery worker in the background
-# We must run it this way on Render's free tier because free background workers are not available
-celery -A config worker --loglevel=info --concurrency=1 --pool=solo &
+# Start Celery worker in the background only if eager mode is explicitly disabled
+if [ "${CELERY_TASK_ALWAYS_EAGER}" = "False" ] || [ "${CELERY_TASK_ALWAYS_EAGER}" = "false" ]; then
+    celery -A config worker --loglevel=info --concurrency=1 --pool=solo &
+fi
 
 # Start Gunicorn in the foreground
 # Render automatically injects the PORT environment variable

@@ -1,8 +1,10 @@
+node_modules/
+dist/
+build/
 .env
-__pycache__/
-*.py[cod]
-*$py.class
-db.sqlite3
-media/
+.venv
 venv/
+__pycache__/
+*.pyc
+db.sqlite3
 .DS_Store

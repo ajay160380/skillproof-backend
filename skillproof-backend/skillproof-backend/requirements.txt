@@ -73,3 +73,4 @@ wcwidth==0.8.2
 whitenoise==6.12.0
 cloudinary==1.41.0
 django-cloudinary-storage==0.3.0
+

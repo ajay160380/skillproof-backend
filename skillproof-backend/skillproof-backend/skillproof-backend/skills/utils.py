@@ -38,7 +38,7 @@ def match_skills_to_tests(extracted_skills: List[str]) -> List[SkillTest]:
                 import json
                 
                 if settings.GROQ_API_KEY:
-                    client = Groq(api_key=settings.GROQ_API_KEY)
+                    client = Groq(api_key=settings.GROQ_API_KEY, timeout=15.0)
                     prompt = f'''Generate a short coding problem or conceptual interview question for the skill: "{skill}".
                     Return a JSON object with: 
                     - "title": (string)
@@ -50,7 +50,7 @@ def match_skills_to_tests(extracted_skills: List[str]) -> List[SkillTest]:
                     '''
                     
                     completion = client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
+                        model="llama3-70b-8192",
                         messages=[{"role": "user", "content": prompt}],
                         temperature=0.3,
                         max_tokens=400,

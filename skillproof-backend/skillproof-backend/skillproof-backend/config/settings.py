@@ -31,6 +31,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'cloudinary_storage',
+    'cloudinary',
 
     # Local apps
     'accounts',
@@ -120,6 +122,14 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # Media files (user uploads like audio recordings)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Cloudinary Storage (for persistent file uploads on Render)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME', default='qf6wbumi'),
+    'API_KEY': env('CLOUDINARY_API_KEY', default='274489168274869'),
+    'API_SECRET': env('CLOUDINARY_API_SECRET', default='sCPUechTlRmm3hGoTGIuEgEe8Gc'),
+}
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

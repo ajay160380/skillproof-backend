@@ -193,6 +193,22 @@ def score_coding_test(code: str, test_pass_rate: float, pylint_score: float, key
     tab_switches = keystroke_log.get('tab_switches', 0)
     devtools_detected = keystroke_log.get('devtools_detected', False)
     
+    if not code or not code.strip() or code.strip() == '# Write your solution here':
+        return {
+            "correctness": 0,
+            "code_quality": 0,
+            "debugging_approach": 0,
+            "overall_score": 0,
+            "feedback": "No code was submitted. Please provide a solution.",
+            "cheating_flags": {
+                "tab_switches": tab_switches,
+                "large_paste_detected": paste_count > 0,
+                "devtools_detected": devtools_detected,
+                "ai_suspicion_level": "none"
+            },
+            "scoring_method": "rule_based"
+        }
+    
     if not getattr(settings, 'GROQ_API_KEY', None):
         logger.warning("GROQ_API_KEY not set, using fallback scorer.")
         return _fallback_coding_score(test_pass_rate, pylint_score, run_attempts, paste_count, tab_switches, devtools_detected)

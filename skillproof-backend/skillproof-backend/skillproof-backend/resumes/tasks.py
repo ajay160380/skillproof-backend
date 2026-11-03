@@ -9,8 +9,40 @@ def process_resume_skills(resume_id: int):
         resume.parsing_status = 'processing'
         resume.save(update_fields=['parsing_status'])
         
-        # Extract text from file
-        text = extract_text_from_file(resume.file.path)
+        # Extract text from file using a temporary file
+        import tempfile
+        import os
+        import requests
+        from django.conf import settings
+        
+        ext = resume.file.name.split('.')[-1] if '.' in resume.file.name else 'pdf'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+            success = False
+            if hasattr(resume.file, 'url'):
+                try:
+                    response = requests.get(resume.file.url, timeout=5)
+                    if response.status_code == 200:
+                        tmp.write(response.content)
+                        success = True
+                except Exception:
+                    pass
+            
+            if not success:
+                # Fallback to local disk
+                local_path = os.path.join(settings.MEDIA_ROOT, resume.file.name)
+                if os.path.exists(local_path):
+                    with open(local_path, 'rb') as f:
+                        tmp.write(f.read())
+                else:
+                    tmp.write(resume.file.read())  # Last resort
+            tmp.flush()
+            tmp_path = tmp.name
+            
+        try:
+            text = extract_text_from_file(tmp_path)
+        finally:
+            os.remove(tmp_path)
+            
         resume.extracted_text = text
         resume.save(update_fields=['extracted_text'])
         

@@ -4,30 +4,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Global variable to cache the Whisper model locally in memory
-_whisper_model = None
-
-def get_whisper_model():
-    """Lazy load the Whisper model so it doesn't block Django startup."""
-    global _whisper_model
-    if _whisper_model is None:
-        import whisper
-        print("Loading Whisper model (base) into memory...")
-        _whisper_model = whisper.load_model('base')
-    return _whisper_model
-
 def transcribe_audio(file_path: str) -> str:
     """
-    Transcribes audio file using local Whisper model.
+    Transcribes audio file using Groq Whisper API to avoid local OOM crashes.
     """
+    from django.conf import settings
     try:
-        model = get_whisper_model()
-        logger.info(f"Transcribing {file_path} with Whisper...")
-        result = model.transcribe(file_path)
-        return result.get('text', '').strip()
+        from groq import Groq
+        if not getattr(settings, 'GROQ_API_KEY', None):
+            return "Transcript unavailable (No API Key)"
+            
+        client = Groq(api_key=settings.GROQ_API_KEY, timeout=30.0)
+        logger.info(f"Transcribing {file_path} with Groq Whisper...")
+        
+        with open(file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                file=(file_path, audio_file.read()),
+                model="whisper-large-v3",
+                response_format="json"
+            )
+            
+        return transcription.text.strip()
     except Exception as e:
-        logger.error(f"Error transcribing audio: {e}")
-        return ""
+        logger.error(f"Error transcribing audio with Groq: {e}")
+        return "Audio transcription failed due to an error."
 
 def calculate_speech_metrics(transcript: str, audio_duration_seconds: float) -> dict:
     """

@@ -65,12 +65,27 @@ def score_communication_test(transcript: str, filler_count: int, wpm: int, avg_s
         logger.warning("GROQ_API_KEY not set, using fallback scorer.")
         return _fallback_communication_score(filler_count, wpm, avg_sentence_length, word_count, keystroke_log)
         
+    if word_count < 10:
+        return {
+            "clarity": 0,
+            "confidence": 0,
+            "structure": 0,
+            "overall_score": 0,
+            "feedback": f"Response was completely insufficient ({word_count} words). Please provide a full, detailed answer.",
+            "cheating_flags": {
+                "tab_switches": keystroke_log.get("tab_switches", 0) if keystroke_log else 0,
+                "devtools_detected": keystroke_log.get("devtools_detected", False) if keystroke_log else False,
+                "ai_suspicion_level": "high"
+            },
+            "scoring_method": "rule_based"
+        }
+
     try:
         client = Groq(api_key=settings.GROQ_API_KEY)
         tab_switches = keystroke_log.get("tab_switches", 0) if keystroke_log else 0
         devtools_detected = keystroke_log.get("devtools_detected", False) if keystroke_log else False
 
-        prompt = f"""You are an expert communication coach and AI proctor reviewing an oral candidate response.
+        prompt = f"""You are a STRICT, expert communication coach and AI proctor reviewing an oral candidate response.
 
 Transcript: "{transcript}"
 Word Count: {word_count} words
@@ -79,11 +94,13 @@ Speaking pace (WPM): {wpm} (Ideal is 120-160 WPM)
 Average sentence length: {avg_sentence_length}
 Proctoring Violations Logged: {tab_switches} tab switches during recording, devtools_detected={devtools_detected}.
 
-If the response sounds robotically scripted/read rather than spoken naturally (e.g., unnaturally uniform pacing, no filler words, perfect structure), or if there are tab switches during recording, note this in your feedback. 
-You must output an "ai_suspicion_level" which is one of: "none", "low", or "high". 
-- "high" for severe evidence of reading a pre-written script or significant tab switching. Apply a score penalty.
-- "low" for minor robotic pacing or a single tab switch (do not heavily penalize score, but note it).
-- "none" if natural and no violations.
+CRITICAL SCORING RULES:
+1. INCOMPLETE ANSWERS: If the Word Count is less than 40 words, the response is incomplete. You MUST give an overall_score of less than 30, and all sub-scores (clarity, confidence, structure) MUST be heavily penalized (below 40). Do NOT give high clarity for short meaningless sentences.
+2. SCRIPTED READING: If the response sounds robotically scripted (e.g., unnaturally uniform pacing, no filler words, perfect structure), or if there are tab switches, note this in your feedback and apply a heavy penalty.
+3. SUSPICION LEVEL: Output an "ai_suspicion_level": "none", "low", or "high". 
+   - "high" for severe evidence of reading a pre-written script or significant tab switching.
+   - "low" for minor robotic pacing or a single tab switch.
+   - "none" if natural and no violations.
 If "ai_suspicion_level" is "high", add a clear warning to the feedback text.
 
 Return ONLY valid JSON, no markdown formatting, no preamble, in this exact structure:
@@ -192,6 +209,22 @@ def score_coding_test(code: str, test_pass_rate: float, pylint_score: float, key
     paste_count = keystroke_log.get('paste_count', 0)
     tab_switches = keystroke_log.get('tab_switches', 0)
     devtools_detected = keystroke_log.get('devtools_detected', False)
+    
+    if not code or not code.strip() or code.strip() == '# Write your solution here':
+        return {
+            "correctness": 0,
+            "code_quality": 0,
+            "debugging_approach": 0,
+            "overall_score": 0,
+            "feedback": "No code was submitted. Please provide a solution.",
+            "cheating_flags": {
+                "tab_switches": tab_switches,
+                "large_paste_detected": paste_count > 0,
+                "devtools_detected": devtools_detected,
+                "ai_suspicion_level": "none"
+            },
+            "scoring_method": "rule_based"
+        }
     
     if not code or not code.strip() or code.strip() == '# Write your solution here':
         return {

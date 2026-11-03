@@ -77,7 +77,7 @@ Rules:
             client = Groq(api_key=settings.GROQ_API_KEY)
             chat_completion = client.chat.completions.create(
                 messages=messages,
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-120b",
                 temperature=0.7,
                 max_tokens=256,
             )

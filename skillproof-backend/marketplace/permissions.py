@@ -2,7 +2,13 @@ from rest_framework.permissions import BasePermission
 
 class IsRecruiter(BasePermission):
     """
-    Allows access only to recruiter users.
+    Allows access to recruiters, admins, superadmins, and staff.
     """
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.role == 'recruiter')
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.role in ['recruiter', 'admin', 'superadmin', 'manager'] or
+            request.user.is_staff or
+            request.user.is_superuser
+        )
