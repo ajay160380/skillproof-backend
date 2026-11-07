@@ -106,19 +106,10 @@ If "ai_suspicion_level" is "high", add a clear warning to the feedback text.
 Return ONLY valid JSON, no markdown formatting, no preamble, in this exact structure:
 {{"clarity": <int 0-100>, "confidence": <int 0-100>, "structure": <int 0-100>, "overall_score": <int 0-100>, "ai_suspicion_level": "none"|"low"|"high", "feedback": "<2-3 sentence constructive feedback>"}}"""
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-        )
-        
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.endswith("```"):
-            content = content[:-3]
-            
-        result = json.loads(content.strip())
+        from config.ai_service import call_groq_json
+        result = call_groq_json([{"role": "user", "content": prompt}], temperature=0.3)
+        if not result or not isinstance(result, dict) or "overall_score" not in result:
+            raise ValueError("Invalid Groq JSON response structure")
         
         # Build explicit proctor & metrics audit trail
         audit_notes = []
@@ -269,19 +260,10 @@ If "ai_suspicion_level" is "high", add a clear warning message to the feedback t
 Return ONLY valid JSON, no markdown formatting, no preamble, in this exact structure:
 {{"correctness": <int 0-100>, "code_quality": <int 0-100>, "debugging_approach": <int 0-100>, "overall_score": <int 0-100>, "ai_suspicion_level": "none"|"low"|"high", "feedback": "<2-3 sentence constructive feedback>"}}"""
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-        )
-        
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.endswith("```"):
-            content = content[:-3]
-            
-        result = json.loads(content.strip())
+        from config.ai_service import call_groq_json
+        result = call_groq_json([{"role": "user", "content": prompt}], temperature=0.3)
+        if not result or not isinstance(result, dict) or "overall_score" not in result:
+            raise ValueError("Invalid Groq JSON response structure")
         
         result['cheating_flags'] = {
             "tab_switches": tab_switches,
