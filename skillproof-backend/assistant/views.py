@@ -70,19 +70,12 @@ Rules:
         # Fallback if Groq is not configured or fails
         fallback_response = "I'm currently operating in offline mode. To get started, I suggest uploading your resume or taking one of the Core Skills assessments on your dashboard!"
         
-        if not getattr(settings, 'GROQ_API_KEY', None) or not Groq:
-            return Response({'response': fallback_response})
-
-        try:
-            client = Groq(api_key=settings.GROQ_API_KEY)
-            chat_completion = client.chat.completions.create(
-                messages=messages,
-                model="openai/gpt-oss-120b",
-                temperature=0.7,
-                max_tokens=256,
-            )
-            ai_response = chat_completion.choices[0].message.content
+        from config.ai_service import call_groq_chat
+        ai_response = call_groq_chat(
+            messages=messages,
+            temperature=0.7,
+            max_tokens=300,
+        )
+        if ai_response:
             return Response({'response': ai_response})
-        except Exception as e:
-            logger.error(f"Groq API error: {e}")
-            return Response({'response': fallback_response})
+        return Response({'response': fallback_response})

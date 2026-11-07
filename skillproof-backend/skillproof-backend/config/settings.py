@@ -15,7 +15,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.onrender.com', 'skillproofi-rouge.vercel.app']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', '.onrender.com', 'skillproofi-rouge.vercel.app']
 GROQ_API_KEY = env('GROQ_API_KEY', default='')
 
 # Application definition
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'jobs',
     'portfolio',
     'messaging',
+    'operations',
 ]
 
 MIDDLEWARE = [

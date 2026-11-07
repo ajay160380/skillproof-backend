@@ -1,10 +1,50 @@
+# Dependencies
 node_modules/
+venv/
+.venv/
+
+# Build output
 dist/
 build/
+staticfiles/
+
+# Environment & Secrets
 .env
-.venv
-venv/
+.env.local
+.env.production
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+
+# Database
 db.sqlite3
+*.sqlite3
+
+# Media & uploads
+media/
+*.wav
+*.mp3
+*.mp4
+
+# Temp & scratch files
+*_temp.*
+*_temp/
+scratch*/
+*.bak
+*.swp
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+npm-debug.log*

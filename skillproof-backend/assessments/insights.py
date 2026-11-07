@@ -317,24 +317,10 @@ Rules:
 6. Do not invent skills or scores not in the data."""
 
     try:
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=1500,
-        )
-
-        content = response.choices[0].message.content.strip()
-        # Clean markdown formatting
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-
-        result = json.loads(content.strip())
+        from config.ai_service import call_groq_json
+        result = call_groq_json([{"role": "user", "content": prompt}], temperature=0.2, max_tokens=1500)
+        if not result or not isinstance(result, dict):
+            raise ValueError("Invalid Groq JSON response structure")
 
         # Validate and enrich with data the LLM shouldn't generate
         readiness_score = result.get('readiness_score', 0)

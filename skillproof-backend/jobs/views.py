@@ -276,22 +276,11 @@ class AIGenerateJobDescriptionView(APIView):
             return Response({'error': 'Role title is required'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
-            from groq import Groq
-            from django.conf import settings
-            client = Groq(api_key=settings.GROQ_API_KEY)
-            
+            from config.ai_service import call_groq_chat
             prompt = f"Write a professional and engaging job description for the role of '{role_title}' at '{company_name}'. Include responsibilities and requirements. Keep it under 200 words."
-            
-            completion = client.chat.completions.create(
-                model="openai/gpt-oss-120b",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=300,
-            )
-            
-            description = completion.choices[0].message.content.strip()
+            description = call_groq_chat([{"role": "user", "content": prompt}], temperature=0.7, max_tokens=300)
+            if not description:
+                raise RuntimeError("Failed to generate job description with Groq")
             return Response({'description': description})
         except Exception as e:
             return Response({'error': str(e), 'description': f"We are looking for a skilled {role_title} to join {company_name}. You will be responsible for building high-quality products and collaborating with our team."})
@@ -304,22 +293,11 @@ class AIGenerateInterviewPrepView(APIView):
         description = request.data.get('description', '')
         
         try:
-            from groq import Groq
-            from django.conf import settings
-            client = Groq(api_key=settings.GROQ_API_KEY)
-            
+            from config.ai_service import call_groq_chat
             prompt = f"Based on the following job description for '{role_title}', generate 3 key interview questions the candidate should prepare for, and provide a brief tip for answering each. Keep it encouraging and concise.\n\nDescription:\n{description[:1000]}"
-            
-            completion = client.chat.completions.create(
-                model="openai/gpt-oss-120b",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=400,
-            )
-            
-            prep_guide = completion.choices[0].message.content.strip()
+            prep_guide = call_groq_chat([{"role": "user", "content": prompt}], temperature=0.7, max_tokens=400)
+            if not prep_guide:
+                raise RuntimeError("Failed to generate interview prep with Groq")
             return Response({'prep_guide': prep_guide})
         except Exception as e:
             return Response({
@@ -373,32 +351,10 @@ Return ONLY valid JSON with no markdown backticks and no preamble:
     "Consider edge cases like empty inputs, negative numbers, or duplicate values."
   ]
 }}"""
-            GROQ_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
-            completion = None
-            for model_name in GROQ_MODELS:
-                try:
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3,
-                        max_tokens=900,
-                    )
-                    if completion and completion.choices and completion.choices[0].message.content:
-                        break
-                except Exception:
-                    continue
-
-            if not completion:
+            from config.ai_service import call_groq_json
+            data = call_groq_json([{"role": "user", "content": prompt}], temperature=0.3, max_tokens=900)
+            if not data or not isinstance(data, dict):
                 raise RuntimeError("All models failed")
-
-            raw = completion.choices[0].message.content.strip()
-            if raw.startswith("```json"):
-                raw = raw[7:]
-            if raw.startswith("```"):
-                raw = raw[3:]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            data = json.loads(raw.strip())
             data['job_id'] = job.id
             data['role_title'] = role_title
             data['company_name'] = company_name
@@ -504,32 +460,10 @@ Return ONLY a valid JSON object with no markdown wrapping:
   "complexity_analysis": "<Time and Space complexity estimate, e.g. O(N) Time, O(1) Space>",
   "readiness_tip": "<1 sentence encouragement advising whether they are ready for the official test>"
 }}"""
-            GROQ_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
-            completion = None
-            for model_name in GROQ_MODELS:
-                try:
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.1,
-                        max_tokens=600,
-                    )
-                    if completion and completion.choices and completion.choices[0].message.content:
-                        break
-                except Exception:
-                    continue
-
-            if not completion:
+            from config.ai_service import call_groq_json
+            result = call_groq_json([{"role": "user", "content": prompt}], temperature=0.1, max_tokens=600)
+            if not result or not isinstance(result, dict):
                 raise RuntimeError("All models failed")
-
-            raw = completion.choices[0].message.content.strip()
-            if raw.startswith("```json"):
-                raw = raw[7:]
-            if raw.startswith("```"):
-                raw = raw[3:]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            result = json.loads(raw.strip())
             result['min_score'] = min_score
             result['is_ready'] = int(result.get('score', 0)) >= min_score
             return Response(result)

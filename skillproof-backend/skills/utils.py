@@ -49,15 +49,10 @@ def match_skills_to_tests(extracted_skills: List[str]) -> List[SkillTest]:
                     Only return the raw JSON object, no other text.
                     '''
                     
-                    completion = client.chat.completions.create(
-                        model="llama3-70b-8192",
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.3,
-                        max_tokens=400,
-                        response_format={"type": "json_object"}
-                    )
-                    
-                    resp_json = json.loads(completion.choices[0].message.content)
+                    from config.ai_service import call_groq_json
+                    resp_json = call_groq_json([{"role": "user", "content": prompt}], temperature=0.3, max_tokens=400)
+                    if not resp_json or not isinstance(resp_json, dict):
+                        continue
                     
                     # Create category if doesn't exist
                     new_cat, _ = SkillCategory.objects.get_or_create(

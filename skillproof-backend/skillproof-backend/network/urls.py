@@ -13,12 +13,15 @@ router.register(r'posts', PostViewSet, basename='post')
 # DRF doesn't have nested routers built-in natively without drf-nested-routers
 # So we'll register comments specifically or just use standard paths.
 
+from marketplace.views import FollowersListView
+
 urlpatterns = [
     path('search/', SearchNetworkView.as_view(), name='search_network'),
     path('follow-user/', FollowUserView.as_view(), name='follow_user'),
     path('unfollow-user/<int:user_id>/', UnfollowUserView.as_view(), name='unfollow_user'),
     path('my-following/', MyFollowingView.as_view(), name='my_following'),
     path('my-followers/', MyFollowersView.as_view(), name='my_followers'),
+    path('followers/', FollowersListView.as_view(), name='network_followers'),
     
     path('feed/', include(router.urls)),
     path('feed/posts/<int:post_pk>/comments/', CommentViewSet.as_view({'get': 'list', 'post': 'create'}), name='post-comments'),

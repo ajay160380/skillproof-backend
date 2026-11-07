@@ -127,17 +127,27 @@ class SuggestedTestsView(generics.ListAPIView):
             
         matched_tests = match_skills_to_tests(resume.extracted_skills)
         
-        # We need a serializer for SkillTest, let's just return basic info
+        from assessments.models import SkillScore
+        user_scores = {
+            s.attempt.test_id: s.overall_score
+            for s in SkillScore.objects.filter(attempt__user=request.user, attempt__status='completed')
+        }
+        
         tests_data = []
         for test in matched_tests:
+            linked_jobs = list(test.job_listings.filter(is_active=True).values('id', 'role_title', 'company_name'))
             tests_data.append({
                 'id': test.id,
                 'title': test.title,
-                'category': test.category.name,
-                'category_slug': test.category.slug,
+                'category': test.category.name if test.category else '',
+                'category_slug': test.category.slug if test.category else '',
                 'difficulty': test.difficulty,
                 'duration_minutes': test.duration_minutes,
-                'test_type': test.test_type
+                'test_type': test.test_type,
+                'user_score': user_scores.get(test.id),
+                'is_completed': test.id in user_scores,
+                'unlocked_jobs': linked_jobs,
+                'unlocked_jobs_count': len(linked_jobs)
             })
             
         return Response(tests_data)
