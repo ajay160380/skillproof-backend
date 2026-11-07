@@ -172,7 +172,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '120/minute',
-        'login': '5/minute',
+        'login': '10/minute',
         'register': '5/minute',
         'code_submit': '10/minute',
         'ai_endpoints': '10/minute',
@@ -190,6 +190,7 @@ SIMPLE_JWT = {
 
 # Production Security Settings
 if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

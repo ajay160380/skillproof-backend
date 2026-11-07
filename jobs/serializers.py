@@ -133,7 +133,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'overall_fit_score', 'started_at', 'completed_at']
 
 class JobApplicantSerializer(serializers.ModelSerializer):
-    candidate_email = serializers.CharField(source='candidate.email', read_only=True)
+    candidate_username = serializers.CharField(source='candidate.username', read_only=True)
     candidate_name = serializers.CharField(source='candidate.full_name', read_only=True)
     candidate_id = serializers.IntegerField(source='candidate.id', read_only=True)
     candidate_avatar = serializers.CharField(source='candidate.avatar_url', read_only=True, default='')
@@ -142,7 +142,7 @@ class JobApplicantSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = JobApplication
-        fields = ['id', 'candidate_id', 'candidate_name', 'candidate_email', 'candidate_avatar', 'status', 'overall_fit_score', 'completed_at']
+        fields = ['id', 'candidate_id', 'candidate_username', 'candidate_name', 'candidate_avatar', 'status', 'overall_fit_score', 'completed_at']
 
 from skills.models import SkillCategory
 from skills.serializers import SkillCategorySerializer
@@ -178,9 +178,10 @@ class InterviewSerializer(serializers.ModelSerializer):
     recruiter_name = serializers.CharField(source='recruiter.full_name', read_only=True)
     recruiter_company = serializers.CharField(source='recruiter.company_name', read_only=True)
     candidate_name = serializers.CharField(source='candidate.full_name', read_only=True)
+    candidate_username = serializers.CharField(source='candidate.username', read_only=True)
     job_role = serializers.CharField(source='job_listing.role_title', read_only=True)
 
     class Meta:
         model = Interview
-        fields = ['id', 'recruiter', 'recruiter_name', 'recruiter_company', 'candidate', 'candidate_name', 'job_listing', 'job_role', 'proposed_time', 'status', 'message', 'created_at', 'updated_at']
+        fields = ['id', 'recruiter', 'recruiter_name', 'recruiter_company', 'candidate', 'candidate_name', 'candidate_username', 'job_listing', 'job_role', 'proposed_time', 'status', 'message', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']

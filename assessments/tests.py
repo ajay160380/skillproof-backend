@@ -58,3 +58,24 @@ class AssessmentSecurityTests(TestCase):
         self.attempt.refresh_from_db()
         self.assertIsNotNone(self.attempt.recording_url)
         self.assertTrue(self.attempt.recording_url.startswith("recordings/attempt_"))
+
+    def test_audio_storage_resolution(self):
+        from assessments.storage import get_audio_storage
+        from django.core.files.storage import default_storage
+
+        # In dev/test without credentials, get_audio_storage returns default_storage
+        storage = get_audio_storage()
+        self.assertEqual(storage, default_storage)
+
+        # In production (DEBUG=False) with Cloudinary credentials configured, VideoMediaCloudinaryStorage is returned
+        with self.settings(
+            DEBUG=False,
+            CLOUDINARY_STORAGE={
+                'CLOUD_NAME': 'mock_cloud',
+                'API_KEY': '1234567890',
+                'API_SECRET': 'mock_secret_abcdefg'
+            }
+        ):
+            prod_storage = get_audio_storage()
+            from cloudinary_storage.storage import VideoMediaCloudinaryStorage
+            self.assertIsInstance(prod_storage, VideoMediaCloudinaryStorage)

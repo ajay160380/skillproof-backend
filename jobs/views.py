@@ -174,6 +174,7 @@ class TalentMatchView(APIView):
 
             results.append({
                 'user_id': stat.user.id,
+                'username': stat.user.username,
                 'name': stat.user.full_name,
                 'email': stat.user.email,
                 'total_points': stat.total_points,

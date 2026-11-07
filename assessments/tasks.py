@@ -26,14 +26,15 @@ def process_test_attempt(attempt_id: int):
             if not audio_key:
                 raise Exception("Audio recording not found on attempt")
 
-            from django.core.files.storage import default_storage
+            from assessments.storage import get_audio_storage
             import tempfile
 
+            storage = get_audio_storage()
             file_ext = os.path.splitext(audio_key)[1] or '.wav'
             temp_path = None
             try:
-                if default_storage.exists(audio_key):
-                    with default_storage.open(audio_key, 'rb') as storage_file:
+                if storage.exists(audio_key):
+                    with storage.open(audio_key, 'rb') as storage_file:
                         with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_audio:
                             temp_path = temp_audio.name
                             for chunk in iter(lambda: storage_file.read(64 * 1024), b''):

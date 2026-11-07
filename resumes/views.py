@@ -15,6 +15,7 @@ from skills.utils import match_skills_to_tests
 class ResumeUploadView(generics.CreateAPIView):
     serializer_class = ResumeUploadSerializer
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -73,6 +74,7 @@ class ResumeViewFileView(generics.GenericAPIView):
 
 class ResumeReparseView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def post(self, request, *args, **kwargs):
         resume = Resume.objects.filter(user=request.user).order_by('-uploaded_at').first()

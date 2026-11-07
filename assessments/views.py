@@ -77,6 +77,7 @@ class SubmitAttemptView(APIView):
             import os
             import uuid
             from django.core.files.storage import default_storage
+            from .storage import get_audio_storage
 
             ext = os.path.splitext(audio_file.name)[1].lower()
             if ext not in self.ALLOWED_AUDIO_EXTENSIONS:
@@ -98,7 +99,7 @@ class SubmitAttemptView(APIView):
                 )
 
             storage_key = f"recordings/attempt_{attempt.id}_{uuid.uuid4().hex[:8]}{ext}"
-            saved_key = default_storage.save(storage_key, audio_file)
+            saved_key = get_audio_storage().save(storage_key, audio_file)
             attempt.recording_url = saved_key
 
         # Handle other fields from JSON payload (recording_url is NEVER user-writable)
@@ -222,6 +223,7 @@ class SkillInsightsView(APIView):
     has completed new assessments since last generation.
     """
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def get(self, request):
         user = request.user

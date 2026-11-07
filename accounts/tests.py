@@ -19,7 +19,8 @@ class SecurityPrivilegeEscalationTests(TestCase):
             username="admin1",
             email="admin1@example.com",
             password="Password123!",
-            role="admin"
+            role="admin",
+            is_staff=True
         )
         self.superadmin_user = User.objects.create_user(
             username="super1",
@@ -161,3 +162,28 @@ class SecurityPrivilegeEscalationTests(TestCase):
         self.assertEqual(res_proof.status_code, status.HTTP_200_OK)
         task.refresh_from_db()
         self.assertEqual(task.status, "completed")
+
+    def test_audit_privileged_users_management_command(self):
+        from io import StringIO
+        from django.core.management import call_command
+
+        # Create a non-staff user with admin role (simulating old bug)
+        sneaky_admin = User.objects.create(
+            username="sneaky_admin",
+            email="sneaky@example.com",
+            role="admin",
+            is_staff=False,
+            is_superuser=False
+        )
+
+        out = StringIO()
+        call_command("audit_privileged_users", stdout=out)
+        output = out.getvalue()
+        self.assertIn("sneaky_admin", output)
+        self.assertIn("Found 1 non-staff user(s)", output)
+
+        # Test with demote
+        out_demote = StringIO()
+        call_command("audit_privileged_users", "--demote", stdout=out_demote)
+        sneaky_admin.refresh_from_db()
+        self.assertEqual(sneaky_admin.role, "candidate")
