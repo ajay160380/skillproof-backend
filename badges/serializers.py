@@ -3,13 +3,12 @@ from .models import Badge, UserStats
 from skills.serializers import SkillCategorySerializer
 
 class UserStatsSerializer(serializers.ModelSerializer):
-    user_email = serializers.EmailField(source='user.email', read_only=True)
-    user_first_name = serializers.CharField(source='user.first_name', read_only=True)
-    user_last_name = serializers.CharField(source='user.last_name', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    full_name = serializers.CharField(source='user.full_name', read_only=True)
 
     class Meta:
         model = UserStats
-        fields = ['id', 'user_email', 'user_first_name', 'user_last_name', 'total_points', 'current_streak', 'highest_streak', 'global_rank', 'last_activity_date']
+        fields = ['id', 'username', 'full_name', 'total_points', 'current_streak', 'highest_streak', 'global_rank', 'last_activity_date']
 
 class BadgeSerializer(serializers.ModelSerializer):
     skill_category = SkillCategorySerializer(read_only=True)

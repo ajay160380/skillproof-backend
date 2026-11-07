@@ -54,16 +54,18 @@ def dashboard_stats_view(request):
     tasks_overdue = tasks_qs.filter(status='overdue').count()
     tasks_audited = tasks_qs.filter(status='audited').count()
     
-    avg_mis = tasks_qs.filter(mis_score__gt=0).aggregate(Avg('mis_score'))['mis_score__avg'] or 85.4
+    avg_mis = tasks_qs.filter(mis_score__gt=0).aggregate(Avg('mis_score'))['mis_score__avg']
+    avg_mis_val = round(float(avg_mis), 1) if avg_mis is not None else 0.0
 
     # Connect with SkillProof assessments if available
     assessments_stats = {'total_attempts': 0, 'verified_count': 0}
     try:
         from assessments.models import TestAttempt, SkillScore
         assessments_stats['total_attempts'] = TestAttempt.objects.count()
-        assessments_stats['verified_count'] = SkillScore.objects.filter(is_verified=True).count()
-    except Exception:
-        pass
+        assessments_stats['verified_count'] = SkillScore.objects.filter(overall_score__gte=60).count()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error computing dashboard stats assessments: {e}")
 
     recent_logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:10]
     recent_logs_data = AuditLogSerializer(recent_logs, many=True).data
@@ -74,7 +76,7 @@ def dashboard_stats_view(request):
             'active_organizations': active_orgs,
             'total_departments': total_depts,
             'total_users': total_users,
-            'mis_score_avg': round(float(avg_mis), 1),
+            'mis_score_avg': avg_mis_val,
         },
         'users_breakdown': users_by_role,
         'tasks_summary': {
@@ -145,7 +147,14 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 class OperationTaskViewSet(viewsets.ModelViewSet):
     queryset = OperationTask.objects.all().order_by('-created_at')
     serializer_class = OperationTaskSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        # Only staff or admins can create, update, or delete tasks
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsOperationsStaffOrAdmin()]
+        if self.action == 'audit_task':
+            return [CanAuditTaskPermission()]
+        return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
@@ -184,6 +193,14 @@ class OperationTaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='submit-proof')
     def submit_proof(self, request, pk=None):
         task = self.get_object()
+        is_staff_or_admin = (
+            request.user.is_superuser or
+            request.user.is_staff or
+            getattr(request.user, 'role', None) in ['admin', 'superadmin', 'manager', 'auditor']
+        )
+        if not is_staff_or_admin and task.assigned_to_id != request.user.id:
+            return Response({'error': 'You can only submit proof for tasks assigned to you.'}, status=status.HTTP_403_FORBIDDEN)
+
         proof = request.data.get('proof_submission', '')
         checklist = request.data.get('checklist_data')
         workflow_stages = request.data.get('workflow_stages')
@@ -204,17 +221,27 @@ class OperationTaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='audit', permission_classes=[CanAuditTaskPermission])
     def audit_task(self, request, pk=None):
         task = self.get_object()
-        audit_action = request.data.get('action', 'approve')
+        audit_action = request.data.get('action')
+        if audit_action not in {'approve', 'reject'}:
+            return Response({'error': "Action must be either 'approve' or 'reject'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        mis_score = request.data.get('mis_score')
+        try:
+            mis_score_val = float(mis_score)
+            if not (0.0 <= mis_score_val <= 100.0):
+                raise ValueError()
+        except (TypeError, ValueError):
+            return Response({'error': "mis_score must be a valid number between 0 and 100."}, status=status.HTTP_400_BAD_REQUEST)
+
         notes = request.data.get('audit_notes', '')
-        mis_score = request.data.get('mis_score', 80.0)
 
         task.audited_by = request.user
         task.audit_notes = notes
-        task.mis_score = float(mis_score)
+        task.mis_score = mis_score_val
         task.status = 'audited' if audit_action == 'approve' else 'in_progress'
         task.save()
 
-        log_audit(request.user, f'Audited Task ({audit_action})', 'OperationTask', task.id, {'notes': notes, 'score': mis_score})
+        log_audit(request.user, f'Audited Task ({audit_action})', 'OperationTask', task.id, {'notes': notes, 'score': mis_score_val})
         return Response(OperationTaskSerializer(task).data)
 
 
@@ -263,11 +290,37 @@ class AdminUserManagementViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='change-role')
     def change_role(self, request, pk=None):
+        # Only existing superadmin or admin can change roles
+        is_admin = request.user.is_superuser or getattr(request.user, 'role', None) in ['admin', 'superadmin']
+        if not is_admin:
+            return Response({'error': 'Access Denied: Only administrators can grant or change user roles.'}, status=status.HTTP_403_FORBIDDEN)
+
         user = self.get_object()
+
+        # Forbid changing own role
+        if request.user.id == user.id:
+            return Response({'error': 'You cannot change your own role.'}, status=status.HTTP_400_BAD_REQUEST)
+
         new_role = request.data.get('role')
-        if new_role:
-            user.role = new_role
-            user.save()
-            log_audit(request.user, 'Changed User Role', 'User', user.id, {'new_role': new_role})
-            return Response({'status': 'success', 'role': user.role})
-        return Response({'error': 'Role is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not new_role:
+            return Response({'error': 'Role is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_roles = dict(User.ROLE_CHOICES).keys()
+        if new_role not in valid_roles:
+            return Response({'error': f"Invalid role '{new_role}'. Valid options: {list(valid_roles)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_superadmin = request.user.is_superuser or getattr(request.user, 'role', None) == 'superadmin'
+
+        # Forbid non-superadmin from granting superadmin
+        if new_role == 'superadmin' and not is_superadmin:
+            return Response({'error': 'Only a superadmin can grant the superadmin role.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Forbid non-superadmin from modifying an existing superadmin
+        if getattr(user, 'role', None) == 'superadmin' and not is_superadmin:
+            return Response({'error': 'Only a superadmin can modify a superadmin user.'}, status=status.HTTP_403_FORBIDDEN)
+
+        old_role = user.role
+        user.role = new_role
+        user.save()
+        log_audit(request.user, 'Changed User Role', 'User', user.id, {'old_role': old_role, 'new_role': new_role})
+        return Response({'status': 'success', 'role': user.role})

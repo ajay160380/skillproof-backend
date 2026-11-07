@@ -1,20 +1,41 @@
 from rest_framework import generics, status
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import RegisterSerializer, UserSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import RegisterSerializer, UserSerializer, PublicUserSerializer
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+class LoginView(TokenObtainPairView):
+    permission_classes = (AllowAny,)
+    throttle_scope = 'login'
+
+class LogoutView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response({'error': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        except Exception:
+            return Response({'error': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
+    throttle_scope = 'register'
 
     def create(self, request, *args, **kwargs):
         email = request.data.get('email')
-        if email and User.objects.filter(email=email).exists():
+        if email and User.objects.filter(email__iexact=email.strip().lower()).exists():
             return Response({"error": "Account already exists. Please log in."}, status=status.HTTP_400_BAD_REQUEST)
             
         serializer = self.get_serializer(data=request.data)
@@ -51,31 +72,15 @@ class CheckUsernameView(generics.GenericAPIView):
         exists = User.objects.filter(username__iexact=username).exists()
         return Response({"available": not exists}, status=status.HTTP_200_OK)
 
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from badges.models import Badge
-from badges.serializers import BadgeSerializer
-
 class PublicProfileView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, username, *args, **kwargs):
         try:
-            from django.db.models import Q
-            lookup = username
-            user = User.objects.get(
-                Q(username__iexact=lookup) | Q(email__iexact=lookup) | Q(id=int(lookup) if str(lookup).isdigit() else 0)
-            )
+            # Case-insensitive lookup strictly by username
+            user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Serialize user data
-        serializer = UserSerializer(user)
-        data = serializer.data
-        
-        # Add public badges
-        badges = Badge.objects.filter(user=user)
-        badge_serializer = BadgeSerializer(badges, many=True)
-        data['public_badges'] = badge_serializer.data
-        
-        return Response(data, status=status.HTTP_200_OK)
+        serializer = PublicUserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)

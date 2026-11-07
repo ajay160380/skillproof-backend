@@ -16,7 +16,7 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    recording_url = models.URLField(max_length=500, null=True, blank=True)
+    recording_url = models.CharField(max_length=500, null=True, blank=True)
     code_submission = models.TextField(null=True, blank=True)
     project_url = models.URLField(max_length=500, null=True, blank=True)
     keystroke_log = models.JSONField(null=True, blank=True)

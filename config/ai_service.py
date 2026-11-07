@@ -101,3 +101,4 @@ def call_groq_json(messages, temperature=0.2, max_tokens=800, preferred_model=No
                 pass
         logger.error(f"Failed to parse Groq response as JSON: {cleaned[:200]}... Error: {e}")
         return None
+

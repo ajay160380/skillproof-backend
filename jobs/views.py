@@ -267,6 +267,7 @@ class RespondInterviewView(APIView):
 
 class AIGenerateJobDescriptionView(APIView):
     permission_classes = [IsRecruiter]
+    throttle_scope = 'ai_endpoints'
 
     def post(self, request):
         role_title = request.data.get('role_title')
@@ -283,10 +284,15 @@ class AIGenerateJobDescriptionView(APIView):
                 raise RuntimeError("Failed to generate job description with Groq")
             return Response({'description': description})
         except Exception as e:
-            return Response({'error': str(e), 'description': f"We are looking for a skilled {role_title} to join {company_name}. You will be responsible for building high-quality products and collaborating with our team."})
+            import logging
+            logging.getLogger(__name__).warning(f"Error generating job description: {e}")
+            return Response({
+                'description': f"We are looking for a skilled {role_title} to join {company_name}. You will be responsible for building high-quality products and collaborating with our team."
+            })
 
 class AIGenerateInterviewPrepView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def post(self, request):
         role_title = request.data.get('role_title', 'this role')
@@ -300,12 +306,15 @@ class AIGenerateInterviewPrepView(APIView):
                 raise RuntimeError("Failed to generate interview prep with Groq")
             return Response({'prep_guide': prep_guide})
         except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Error generating interview prep: {e}")
             return Response({
                 'prep_guide': f"1. Tell me about a time you overcame a technical challenge related to {role_title}.\n2. Why are you interested in this role?\n3. How do you keep your skills updated?"
             })
 
 class JobPracticeAssignmentView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def get(self, request, pk):
         job = get_object_or_404(JobListing, pk=pk)
@@ -390,6 +399,7 @@ Return ONLY valid JSON with no markdown backticks and no preamble:
 
 class JobPracticeEvaluateView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def post(self, request):
         role_title = request.data.get('role_title', 'Software Engineer')

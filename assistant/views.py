@@ -18,6 +18,7 @@ except ImportError:
 
 class AssistantChatView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'ai_endpoints'
 
     def post(self, request):
         user = request.user

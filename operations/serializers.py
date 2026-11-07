@@ -110,6 +110,17 @@ class AdminUserManagementSerializer(serializers.ModelSerializer):
             'is_active', 'is_staff', 'is_superuser', 'created_at',
             'org_memberships', 'assigned_tasks_count'
         ]
+        read_only_fields = ['id', 'created_at']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        # is_staff and is_superuser are strictly read-only unless the requester is a superuser
+        if not (request and request.user and request.user.is_superuser):
+            if 'is_staff' in self.fields:
+                self.fields['is_staff'].read_only = True
+            if 'is_superuser' in self.fields:
+                self.fields['is_superuser'].read_only = True
 
     def get_assigned_tasks_count(self, obj):
         return OperationTask.objects.filter(assigned_to=obj).count()

@@ -20,7 +20,6 @@ class StartAttemptSerializer(serializers.Serializer):
     test_id = serializers.IntegerField()
 
 class SubmitAttemptSerializer(serializers.Serializer):
-    recording_url = serializers.CharField(required=False)
     code_submission = serializers.CharField(required=False, allow_blank=True)
     project_url = serializers.URLField(required=False, allow_blank=True)
     keystroke_log = serializers.JSONField(required=False)

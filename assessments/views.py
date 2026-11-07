@@ -56,6 +56,14 @@ class StartAttemptView(APIView):
 
 class SubmitAttemptView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'code_submit'
+
+    ALLOWED_AUDIO_EXTENSIONS = {'.webm', '.wav', '.mp3', '.m4a', '.ogg'}
+    ALLOWED_AUDIO_MIMES = {
+        'audio/webm', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3',
+        'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'video/webm'
+    }
+    MAX_AUDIO_SIZE = 10 * 1024 * 1024  # 10 MB
 
     def post(self, request, pk):
         attempt = get_object_or_404(TestAttempt, pk=pk, user=request.user)
@@ -63,34 +71,45 @@ class SubmitAttemptView(APIView):
         if attempt.status != 'in_progress':
             return Response({"error": "Only in_progress attempts can be submitted."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Handle audio file upload for communication tests
+        # Handle audio file upload for communication tests via default_storage
         audio_file = request.FILES.get('audio_file')
         if audio_file:
             import os
-            from django.conf import settings as django_settings
-            recordings_dir = os.path.join(django_settings.MEDIA_ROOT, 'recordings')
-            os.makedirs(recordings_dir, exist_ok=True)
-            
-            file_name = f'attempt_{attempt.id}_{audio_file.name}'
-            file_path = os.path.join(recordings_dir, file_name)
-            
-            with open(file_path, 'wb+') as destination:
-                for chunk in audio_file.chunks():
-                    destination.write(chunk)
-            
-            attempt.recording_url = file_path
-        
-        # Handle other fields from JSON payload
+            import uuid
+            from django.core.files.storage import default_storage
+
+            ext = os.path.splitext(audio_file.name)[1].lower()
+            if ext not in self.ALLOWED_AUDIO_EXTENSIONS:
+                return Response(
+                    {"error": f"Invalid audio format '{ext}'. Allowed formats: {', '.join(sorted(self.ALLOWED_AUDIO_EXTENSIONS))}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if audio_file.content_type and audio_file.content_type.lower() not in self.ALLOWED_AUDIO_MIMES:
+                return Response(
+                    {"error": f"Invalid audio content-type '{audio_file.content_type}'."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if audio_file.size > self.MAX_AUDIO_SIZE:
+                return Response(
+                    {"error": "Audio file exceeds maximum allowed size of 10 MB."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            storage_key = f"recordings/attempt_{attempt.id}_{uuid.uuid4().hex[:8]}{ext}"
+            saved_key = default_storage.save(storage_key, audio_file)
+            attempt.recording_url = saved_key
+
+        # Handle other fields from JSON payload (recording_url is NEVER user-writable)
         serializer = SubmitAttemptSerializer(data=request.data)
         if serializer.is_valid():
-            attempt.recording_url = serializer.validated_data.get('recording_url', attempt.recording_url)
             attempt.code_submission = serializer.validated_data.get('code_submission', attempt.code_submission)
             attempt.project_url = serializer.validated_data.get('project_url', attempt.project_url)
             
             keystrokes = serializer.validated_data.get('keystroke_log', attempt.keystroke_log) or {}
             if isinstance(keystrokes, dict):
                 cheating_flags = serializer.validated_data.get('cheating_flags')
-                # Also check request.data for 'cheating_flags' in case it came as a string (FormData)
                 if not cheating_flags and 'cheating_flags' in request.data:
                     try:
                         cheating_flags = json.loads(request.data['cheating_flags'])

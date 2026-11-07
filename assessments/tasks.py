@@ -22,20 +22,36 @@ def process_test_attempt(attempt_id: int):
             frontend_cheating_flags = keystroke_log.pop('frontend_cheating_flags', {})
 
         if attempt.test.test_type == 'communication':
-            # In a real app we'd download the audio file from attempt.recording_url or S3.
-            # For local demo, we assume attempt.recording_url is a local path or we have a test file.
-            # We'll expect a valid path for Phase 2 end-to-end testing.
-            
-            audio_path = attempt.recording_url
-            if not audio_path or not os.path.exists(audio_path):
-                # fallback or mock
-                raise Exception("Audio file not found")
-                
-            # For duration, we can use a fixed one or calculate if we had a library
-            # For simplicity in Phase 2, assume 30 seconds for test sample.
-            duration_seconds = 30.0
-            
-            transcript = transcribe_audio(audio_path)
+            audio_key = attempt.recording_url
+            if not audio_key:
+                raise Exception("Audio recording not found on attempt")
+
+            from django.core.files.storage import default_storage
+            import tempfile
+
+            file_ext = os.path.splitext(audio_key)[1] or '.wav'
+            temp_path = None
+            try:
+                if default_storage.exists(audio_key):
+                    with default_storage.open(audio_key, 'rb') as storage_file:
+                        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_audio:
+                            temp_path = temp_audio.name
+                            for chunk in iter(lambda: storage_file.read(64 * 1024), b''):
+                                temp_audio.write(chunk)
+                elif os.path.exists(audio_key):
+                    temp_path = audio_key
+                else:
+                    raise FileNotFoundError(f"Recording file not found in storage: {audio_key}")
+
+                duration_seconds = 30.0
+                transcript = transcribe_audio(temp_path)
+            finally:
+                if temp_path and temp_path != audio_key and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+
             attempt.raw_transcript = transcript
             attempt.save(update_fields=['raw_transcript'])
             
